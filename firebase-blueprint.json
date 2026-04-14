@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Private user profile data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Favorite": {
+      "title": "Favorite Place",
+      "description": "A place saved by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "placeId": { "type": "string", "description": "Unique ID for the place (e.g., name + location hash)" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "priceRange": { "type": "string" },
+        "rating": { "type": "number" },
+        "savedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "placeId", "name", "savedAt"]
+    },
+    "Review": {
+      "title": "Place Review",
+      "description": "A user review for a specific place",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "placeId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "placeId", "rating", "comment", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "User favorites"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Public reviews for places"
+    }
+  }
+}

@@ -1,0 +1,136 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (Firebase Auth UID)
+// Fields:
+//   - uid: string (required) - User's unique ID
+//   - email: string (required) - User's email (PII)
+//   - displayName: string (optional) - User's name
+//   - photoURL: string (optional) - User's photo
+//   - createdAt: timestamp (required) - Creation time
+//
+// Collection: favorites
+// Document ID: {favoriteId} (Auto-generated or composite)
+// Fields:
+//   - userId: string (required) - Owner's UID
+//   - placeId: string (required) - Unique ID for the place
+//   - name: string (required) - Place name
+//   - location: string (required) - Place location
+//   - category: string (required) - Place category
+//   - description: string (required) - Place description
+//   - priceRange: string (required) - Price range
+//   - rating: number (required) - Place rating
+//   - savedAt: timestamp (required) - Time saved
+//
+// Collection: reviews
+// Document ID: {reviewId} (Auto-generated)
+// Fields:
+//   - userId: string (required) - Author's UID
+//   - userName: string (required) - Author's display name
+//   - userPhoto: string (optional) - Author's photo
+//   - placeId: string (required) - Target place ID
+//   - rating: number (required) - Rating (1-5)
+//   - comment: string (required) - Review text
+//   - createdAt: timestamp (required) - Creation time
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.createdAt is timestamp &&
+             ( !('displayName' in data) || (data.displayName is string && data.displayName.size() < 100) ) &&
+             ( !('photoURL' in data) || isValidUrl(data.photoURL) );
+    }
+
+    function isValidFavorite(data) {
+      return data.keys().hasAll(['userId', 'placeId', 'name', 'savedAt']) &&
+             data.userId == request.auth.uid &&
+             data.placeId is string &&
+             data.name is string && data.name.size() < 200 &&
+             data.savedAt is timestamp;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['userId', 'userName', 'placeId', 'rating', 'comment', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() < 100 &&
+             data.placeId is string &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() < 2000 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users collection: Strictly private (contains email)
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // Favorites collection: Private to owner
+    match /favorites/{favoriteId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidFavorite(request.resource.data);
+      allow update: if isDocOwner() && isValidFavorite(request.resource.data) &&
+                      request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner();
+    }
+
+    // Reviews collection: Publicly readable, owner can write
+    match /reviews/{reviewId} {
+      allow read: if true; // Public reviews
+      allow create: if isAuthenticated() && isValidReview(request.resource.data);
+      allow update: if isDocOwner() && isValidReview(request.resource.data) &&
+                      request.resource.data.userId == resource.data.userId &&
+                      request.resource.data.placeId == resource.data.placeId;
+      allow delete: if isDocOwner();
+    }
+  }
+}
